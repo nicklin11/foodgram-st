@@ -1,7 +1,6 @@
 # backend/api/models.py
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
-from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -85,13 +84,13 @@ class RecipeIngredient(models.Model):
     recipe = models.ForeignKey(
         Recipe,
         on_delete=models.CASCADE,
-        related_name='recipeingredients',  # Changed related_name to avoid clash
+        related_name='recipeingredients',
         verbose_name='Рецепт'
     )
     ingredient = models.ForeignKey(
         Ingredient,
-        on_delete=models.PROTECT,  # Prevent deleting ingredient if used in recipe
-        related_name='recipeingredients',  # Changed related_name
+        on_delete=models.PROTECT,
+        related_name='recipeingredients',
         verbose_name='Ингредиент'
     )
     amount = models.PositiveSmallIntegerField(

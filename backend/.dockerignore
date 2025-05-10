@@ -8,8 +8,6 @@ venv/
 .git
 .gitignore
 db.sqlite3 # If you're not using it in Docker
-media/ # Media should be handled by volumes
-staticfiles/ # Staticfiles will be collected into a volume
 *.swp
 *.swo
 *.DS_Store

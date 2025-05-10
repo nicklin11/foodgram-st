@@ -56,11 +56,9 @@ class Command(BaseCommand):
                         continue
 
                     try:
-                        # Use get_or_create to avoid duplicates based on unique constraint
                         obj, created = Ingredient.objects.get_or_create(
                             name=name,
                             measurement_unit=measurement_unit,
-                            # Optional: defaults={} can be used if you have default values
                         )
                         if created:
                             loaded_count += 1
@@ -80,7 +78,7 @@ class Command(BaseCommand):
         except Exception as e:
             raise CommandError(f'An error occurred: {e}')
 
-        self.stdout.write(self.style.SUCCESS(f'Finished loading ingredients.'))
+        self.stdout.write(self.style.SUCCESS('Finished loading ingredients.'))
         self.stdout.write(self.style.SUCCESS(f'  Added: {loaded_count}'))
         self.stdout.write(self.style.WARNING(
             f'  Skipped/Existing: {skipped_count}'))

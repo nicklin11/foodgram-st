@@ -1,6 +1,7 @@
 # backend/api/admin.py
 from django.contrib import admin
-from .models import Ingredient, Recipe, RecipeIngredient, Favorite, ShoppingCart, Subscription
+from .models import (Ingredient, Recipe, RecipeIngredient,
+                     Favorite, ShoppingCart, Subscription)
 
 
 @admin.register(Ingredient)
