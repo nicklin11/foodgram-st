@@ -33,39 +33,6 @@ class Ingredient(models.Model):
         return f'{self.name}, {self.measurement_unit}'
 
 
-class Tag(models.Model):
-    """Tag model."""
-    name = models.CharField(
-        'Название тега',
-        max_length=200,
-        unique=True
-    )
-    color = models.CharField(
-        'Цвет в HEX',
-        max_length=7,
-        unique=True,
-        validators=[
-            RegexValidator(
-                regex=r'^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$',
-                message='Введите цвет в формате HEX (например, #FF0000)'
-            )
-        ]
-    )
-    slug = models.SlugField(
-        'Уникальный слаг',
-        max_length=200,
-        unique=True
-    )
-
-    class Meta:
-        verbose_name = 'Тег'
-        verbose_name_plural = 'Теги'
-        ordering = ('name',)
-
-    def __str__(self):
-        return self.name
-
-
 class Recipe(models.Model):
     """Recipe model."""
     author = models.ForeignKey(
@@ -90,11 +57,6 @@ class Recipe(models.Model):
         through='RecipeIngredient',
         related_name='recipes',
         verbose_name='Ингредиенты'
-    )
-    tags = models.ManyToManyField(
-        Tag,
-        related_name='recipes',
-        verbose_name='Теги'
     )
     cooking_time = models.PositiveSmallIntegerField(
         'Время приготовления (в минутах)',
