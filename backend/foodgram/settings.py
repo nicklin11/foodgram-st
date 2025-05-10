@@ -199,8 +199,8 @@ DJOSER = {
     'HIDE_USERS': False,  # Allow user listing
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Your frontend development server
-    "http://127.0.0.1:3000",
-]
-CORS_ALLOW_ALL_ORIGINS = False  # Be more specific in production
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",  # Your frontend development server
+#     "http://127.0.0.1:3000",
+# ]
+# CORS_ALLOW_ALL_ORIGINS = False  # Be more specific in production

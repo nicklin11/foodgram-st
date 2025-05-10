@@ -9,7 +9,7 @@ from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerialize
 from django.contrib.auth.models import AnonymousUser  # Import AnonymousUser
 
 from .models import (
-    Ingredient, Tag, Recipe, RecipeIngredient, Favorite, ShoppingCart,
+    Ingredient, Recipe, RecipeIngredient, Favorite, ShoppingCart,
     Subscription
 )
 from users.models import User  # Import custom User model
@@ -103,12 +103,6 @@ class IngredientSerializer(serializers.ModelSerializer):
         fields = ('id', 'name', 'measurement_unit')
 
 
-class TagSerializer(serializers.ModelSerializer):
-    """Serializer for Tag."""
-    class Meta:
-        model = Tag
-        fields = ('id', 'name', 'color', 'slug')
-
 # --- Recipe Related Serializers ---
 
 
@@ -137,7 +131,6 @@ class RecipeIngredientWriteSerializer(serializers.ModelSerializer):
 
 class RecipeReadSerializer(serializers.ModelSerializer):
     """Serializer for reading/displaying Recipe details."""
-    tags = TagSerializer(many=True, read_only=True)
     author = CustomUserSerializer(read_only=True)
     ingredients = RecipeIngredientReadSerializer(
         source='recipeingredients', many=True
@@ -149,7 +142,7 @@ class RecipeReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Recipe
         fields = (
-            'id', 'tags', 'author', 'ingredients', 'is_favorited',
+            'id', 'author', 'ingredients', 'is_favorited',
             'is_in_shopping_cart', 'name', 'image', 'text', 'cooking_time'
         )
 
@@ -176,9 +169,6 @@ class RecipeReadSerializer(serializers.ModelSerializer):
 
 class RecipeWriteSerializer(serializers.ModelSerializer):
     """Serializer for creating/updating Recipes."""
-    tags = serializers.PrimaryKeyRelatedField(
-        queryset=Tag.objects.all(), many=True
-    )
     ingredients = RecipeIngredientWriteSerializer(many=True)
     image = Base64ImageField(required=True, allow_null=False)
     author = CustomUserSerializer(read_only=True)  # Set automatically
@@ -197,9 +187,6 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
             if 'ingredients' not in self.initial_data:  # Check raw request data
                 raise serializers.ValidationError(
                     {'ingredients': ['Это поле обязательно.']})
-            if 'tags' not in self.initial_data:  # Check raw request data
-                raise serializers.ValidationError(
-                    {'tags': ['Это поле обязательно.']})
         return data
 
     def validate_ingredients(self, ingredients):
@@ -220,14 +207,6 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
                 })
         return ingredients
 
-    def validate_tags(self, tags):
-        if not tags:
-            raise serializers.ValidationError(
-                'Нужно выбрать хотя бы один тег.')
-        if len(tags) != len(set(tags)):
-            raise serializers.ValidationError('Теги не должны повторяться.')
-        return tags
-
     def validate_cooking_time(self, value):
         if value < 1:
             raise serializers.ValidationError(
@@ -235,9 +214,8 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
             )
         return value
 
-    def _add_ingredients_and_tags(self, recipe, ingredients_data, tags_data):
-        """Helper to handle ingredient/tag creation for a recipe."""
-        recipe.tags.set(tags_data)
+    def _add_ingredients(self, recipe, ingredients_data):
+        """Helper to handle ingredient creation for a recipe."""
         RecipeIngredient.objects.bulk_create([
             RecipeIngredient(
                 recipe=recipe,
@@ -249,7 +227,6 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
 
     @transaction.atomic  # Ensure atomicity
     def create(self, validated_data):
-        tags_data = validated_data.pop('tags')
         ingredients_data = validated_data.pop('ingredients')
 
         # --- FIX: Remove author from validated_data before unpacking ---
@@ -259,14 +236,12 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
             author=self.context['request'].user,  # Explicitly set the author
             **validated_data                     # Unpack the rest
         )
-        self._add_ingredients_and_tags(recipe, ingredients_data, tags_data)
+        self._add_ingredients(recipe, ingredients_data)
         return recipe
 
     @transaction.atomic
     def update(self, instance, validated_data):
         ingredients_data = validated_data.pop('ingredients', None)
-        tags_data = validated_data.pop('tags', None)
-
         # Handle ingredients update only if provided in PATCH
         if ingredients_data is not None:
             # Ensure this validation is suitable for updates
@@ -280,13 +255,6 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
                     amount=ing_data['amount']
                 ) for ing_data in ingredients_data
             ])
-
-        # Handle tags update only if provided in PATCH
-        if tags_data is not None:
-            # Ensure this validation is suitable for updates
-            self.validate_tags(tags_data)
-            # .set() handles clearing and setting for direct M2M
-            instance.tags.set(tags_data)
 
         # Update other fields if they are in validated_data
         instance.name = validated_data.get('name', instance.name)

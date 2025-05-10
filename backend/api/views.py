@@ -10,11 +10,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from .models import (
-    Ingredient, Tag, Recipe, Favorite, ShoppingCart, Subscription
+    Ingredient, Recipe, Favorite, ShoppingCart, Subscription
 )
 from users.models import User
 from .serializers import (
-    IngredientSerializer, TagSerializer, RecipeReadSerializer,
+    IngredientSerializer, RecipeReadSerializer,
     RecipeWriteSerializer, ShortRecipeSerializer, SubscriptionSerializer,
     AvatarSerializer
 )
@@ -155,14 +155,6 @@ class CustomUserViewSet(DjoserUserViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class TagViewSet(viewsets.ReadOnlyModelViewSet):
-    """Viewset for Tags (Read Only)."""
-    queryset = Tag.objects.all()
-    serializer_class = TagSerializer
-    permission_classes = (permissions.AllowAny,)
-    pagination_class = None  # Tags usually don't need pagination
-
-
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     """Viewset for Ingredients (Read Only)."""
     queryset = Ingredient.objects.all()
@@ -177,7 +169,7 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
 class RecipeViewSet(viewsets.ModelViewSet):
     """Viewset for Recipes (CRUD + custom actions)."""
     queryset = Recipe.objects.select_related('author').prefetch_related(
-        'tags', 'ingredients'
+        'ingredients'
     )
     permission_classes = (IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly,)
     pagination_class = CustomPageNumberPagination
