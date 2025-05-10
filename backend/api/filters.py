@@ -2,7 +2,7 @@
 from django_filters.rest_framework import FilterSet, filters
 from rest_framework.filters import SearchFilter
 
-from .models import Recipe, Ingredient  # Tag model import assumed if used
+from .models import Recipe, Ingredient
 
 
 class IngredientFilter(SearchFilter):
@@ -11,10 +11,6 @@ class IngredientFilter(SearchFilter):
 
 class RecipeFilter(FilterSet):
     """FilterSet for filtering recipes."""
-    tags = filters.AllValuesMultipleFilter(
-        field_name='tags__slug',
-        label='Теги (slug)'
-    )
     is_favorited = filters.BooleanFilter(
         method='filter_is_favorited',
         label='В избранном'
@@ -26,7 +22,7 @@ class RecipeFilter(FilterSet):
 
     class Meta:
         model = Recipe
-        fields = ('tags', 'author', 'is_favorited', 'is_in_shopping_cart')
+        fields = ('author', 'is_favorited', 'is_in_shopping_cart')
 
     def filter_is_favorited(self, queryset, name, value):
         user = self.request.user

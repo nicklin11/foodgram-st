@@ -5,4 +5,4 @@ from django.apps import AppConfig
 class ApiConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'api'
-    verbose_name = 'API (Рецепты, Ингредиенты, Теги и т.д.)'
+    verbose_name = 'API (Рецепты, Ингредиенты и т.д.)'

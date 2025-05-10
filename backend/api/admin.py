@@ -1,6 +1,6 @@
 # backend/api/admin.py
 from django.contrib import admin
-from .models import Ingredient, Tag, Recipe, RecipeIngredient, Favorite, ShoppingCart, Subscription
+from .models import Ingredient, Recipe, RecipeIngredient, Favorite, ShoppingCart, Subscription
 
 
 @admin.register(Ingredient)
@@ -8,14 +8,6 @@ class IngredientAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'measurement_unit')
     search_fields = ('name',)
     list_filter = ('name',)
-    empty_value_display = '-пусто-'
-
-
-@admin.register(Tag)
-class TagAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'slug', 'color')
-    search_fields = ('name', 'slug')
-    prepopulated_fields = {'slug': ('name',)}
     empty_value_display = '-пусто-'
 
 
@@ -29,8 +21,7 @@ class RecipeIngredientInline(admin.TabularInline):
 class RecipeAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'author', 'get_favorites_count')
     search_fields = ('name', 'author__username', 'author__email')
-    list_filter = ('author', 'name', 'tags')
-    filter_horizontal = ('tags',)  # Better UI for ManyToMany
+    list_filter = ('author', 'name')
     inlines = (RecipeIngredientInline,)
     # Show pub_date and favorites count
     readonly_fields = ('pub_date', 'get_favorites_count')
