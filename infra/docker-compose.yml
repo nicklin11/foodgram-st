@@ -1,11 +1,36 @@
+# docker-compose.yml (illustrative additions)
 version: '3.3'
 services:
+  db:
+    image: postgres:13.10-alpine # Or your preferred version
+    container_name: foodgram-db
+    volumes:
+      - foodgram_db_data:/var/lib/postgresql/data/ # Persistent DB data
+    env_file:
+      - ./.env # For DB credentials
+    ports: # Optional: for direct DB access from host if needed
+      - "5432:5432"
 
-  frontend:
+  backend:
+    container_name: foodgram-backend
+    build: ../backend # Assuming Dockerfile is in ../backend
+    restart: always
+    volumes:
+      - static_volume:/app/staticfiles/ # For Django admin static
+      - media_volume:/app/media/      # For user-uploaded media
+    depends_on:
+      - db
+    env_file:
+      - ./.env # For Django settings, DB connection, etc.
+    expose: # Expose port only to other services in the network
+      - "8000"
+
+  frontend: # Your existing frontend service
     container_name: foodgram-front
     build: ../frontend
     volumes:
-      - ../frontend/:/app/result_build/
+      - ../frontend/build:/app/result_build/ # Changed target to avoid overwriting source
+
   nginx:
     container_name: foodgram-proxy
     image: nginx:1.25.4-alpine
@@ -13,5 +38,15 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
-      - ../frontend/build:/usr/share/nginx/html/
+      - ../frontend/build:/usr/share/nginx/html/ # For frontend statics
       - ../docs/:/usr/share/nginx/html/api/docs/
+      - static_volume:/usr/share/nginx/html/static/  # For Django admin static
+      - media_volume:/usr/share/nginx/html/media/    # For user-uploaded media
+    depends_on:
+      - backend # Nginx needs backend to proxy to
+      - frontend # Nginx needs frontend files to be built
+
+volumes:
+  foodgram_db_data: # Define named volume for DB
+  static_volume:
+  media_volume:
