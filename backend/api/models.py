@@ -10,11 +10,11 @@ class Ingredient(models.Model):
     """Ingredient model."""
     name = models.CharField(
         'Название ингредиента',
-        max_length=200
+        max_length=128
     )
     measurement_unit = models.CharField(
         'Единица измерения',
-        max_length=200
+        max_length=64
     )
 
     class Meta:
@@ -42,7 +42,7 @@ class Recipe(models.Model):
     )
     name = models.CharField(
         'Название рецепта',
-        max_length=200  # Max length from Postman is 256, but 200 is common
+        max_length=256
     )
     image = models.ImageField(
         'Картинка',
@@ -54,15 +54,15 @@ class Recipe(models.Model):
     ingredients = models.ManyToManyField(
         Ingredient,
         through='RecipeIngredient',
-        related_name='recipes',
+        related_name='recipes_featuring_ingredient',
+        # related_name это же атрибут
+        # https://djangocentral.com/understanding-related-name-in-django-models/
         verbose_name='Ингредиенты'
     )
     cooking_time = models.PositiveSmallIntegerField(
         'Время приготовления (в минутах)',
         validators=[
-            MinValueValidator(1, 'Время должно быть не менее 1 минуты'),
-            # Optional: Add a reasonable MaxValueValidator if desired
-            # MaxValueValidator(32000, 'Слишком долгое время приготовления')
+            MinValueValidator(1),
         ]
     )
     pub_date = models.DateTimeField(
@@ -96,8 +96,7 @@ class RecipeIngredient(models.Model):
     amount = models.PositiveSmallIntegerField(
         'Количество',
         validators=[
-            MinValueValidator(1, 'Количество должно быть не менее 1')
-            # Optional: Add MaxValueValidator if needed
+            MinValueValidator(1)
         ]
     )
 
@@ -126,7 +125,7 @@ class Favorite(models.Model):
     recipe = models.ForeignKey(
         Recipe,
         on_delete=models.CASCADE,
-        related_name='favorited_by',
+        related_name='favorited_by_set',
         verbose_name='Избранный рецепт'
     )
 
@@ -149,13 +148,13 @@ class ShoppingCart(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='shopping_cart',
+        related_name='shopping_cart_set',
         verbose_name='Пользователь'
     )
     recipe = models.ForeignKey(
         Recipe,
         on_delete=models.CASCADE,
-        related_name='in_shopping_cart_by',
+        related_name='in_shopping_cart_set',
         verbose_name='Рецепт в корзине'
     )
 
@@ -178,13 +177,13 @@ class Subscription(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='follower',  # User is the follower
+        related_name='followers',
         verbose_name='Подписчик'
     )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='following',  # Author is being followed
+        related_name='authors',
         verbose_name='Автор'
     )
 

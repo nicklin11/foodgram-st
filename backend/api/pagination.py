@@ -2,7 +2,7 @@
 from rest_framework.pagination import PageNumberPagination
 
 
-class CustomPageNumberPagination(PageNumberPagination):
+class FoodgramPageNumberPagination(PageNumberPagination):
     page_size = 6  # Default page size
     # Allow client to override page size via 'limit' query param
     page_size_query_param = 'limit'

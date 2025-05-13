@@ -1,12 +1,9 @@
-Django>=4.2,<5.0 # Or your preferred Django version
+Django>=4.2,<5.0
 djangorestframework>=3.14,<3.15
 djoser>=2.1,<2.2
 psycopg2-binary>=2.9,<3.0 # For PostgreSQL
 django-filter>=23.5,<24.0
 gunicorn>=21.2,<22.0 # For running the app in production
-# Optional: Add Pillow for ImageField handling if not already installed
 Pillow>=10.0,<11.0
-# Optional: Add python-dotenv for managing environment variables
 python-dotenv>=1.0,<2.0
-# Optional: Add django-cors-headers if needed for CORS
-# django-cors-headers>=4.0,<5.0
+drf-extra-fields

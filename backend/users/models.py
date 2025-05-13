@@ -20,8 +20,7 @@ class User(AbstractUser):
         unique=True,
         validators=[
             RegexValidator(
-                regex=r'^[\w.@+-]+\Z',
-                message='Имя пользователя содержит недопустимые символы.'
+                regex=r'^[\w.@+-]+\Z'
             )
         ]
     )

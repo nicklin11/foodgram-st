@@ -20,7 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY')
+SECRET_KEY = os.environ.get(
+    'SECRET_KEY', 'django-insecure-default-development-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = bool(int(os.environ.get('DEBUG', 1)))
@@ -110,7 +111,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/stable/topics/i18n/
 LANGUAGE_CODE = 'ru-ru'  # Set to Russian
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Moscow'
 USE_I18N = True
 USE_TZ = True
 
@@ -141,7 +142,7 @@ REST_FRAMEWORK = {
         # 'rest_framework.authentication.SessionAuthentication',
     ],
     # Your custom paginator
-    'DEFAULT_PAGINATION_CLASS': 'api.pagination.CustomPageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'api.pagination.FoodgramPageNumberPagination',
     'PAGE_SIZE': 6,  # Default page size matches frontend expectation
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -160,9 +161,9 @@ DJOSER = {
     'SET_PASSWORD_RETYPE': False,
     'PASSWORD_RESET_CONFIRM_RETYPE': True,
     'SERIALIZERS': {
-        'user_create': 'api.serializers.CustomUserCreateSerializer',
-        'user': 'api.serializers.CustomUserSerializer',
-        'current_user': 'api.serializers.CustomUserSerializer',
+        'user_create': 'djoser.serializers.UserCreateSerializer',
+        'user': 'api.serializers.UserDetailSerializer',
+        'current_user': 'api.serializers.UserDetailSerializer',
         # 'activation': 'djoser.serializers.ActivationSerializer',
         # 'password_reset': 'djoser.serializers.SendEmailResetSerializer',
         # 'password_reset_confirm': 'djoser.serializers.PasswordResetConfirmSerializer',
@@ -179,10 +180,7 @@ DJOSER = {
         # 'token_create': 'djoser.serializers.TokenCreateSerializer',
     },
     'PERMISSIONS': {
-        # Allow listing users
         'user_list': ['rest_framework.permissions.IsAuthenticatedOrReadOnly'],
-        # Other permissions can be customized if needed
-        # <-- ADD THIS LINE (or IsAuthenticatedOrReadOnly)
         'user': ['rest_framework.permissions.IsAuthenticatedOrReadOnly'],
         'current_user': ['rest_framework.permissions.IsAuthenticated'],
     },
