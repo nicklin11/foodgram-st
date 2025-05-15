@@ -54,9 +54,7 @@ class Recipe(models.Model):
     ingredients = models.ManyToManyField(
         Ingredient,
         through='RecipeIngredient',
-        related_name='recipes_featuring_ingredient',
-        # related_name это же атрибут
-        # https://djangocentral.com/understanding-related-name-in-django-models/
+        related_name='recipes',
         verbose_name='Ингредиенты'
     )
     cooking_time = models.PositiveSmallIntegerField(

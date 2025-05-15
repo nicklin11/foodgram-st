@@ -1,7 +1,6 @@
 # backend/api/views.py
-import io
 from djoser.views import UserViewSet as DjoserUserViewSet
-from django.http import FileResponse
+from django.http import FileResponse, Http404
 from .utils import generate_shopping_list_text
 from .pagination import FoodgramPageNumberPagination
 from .filters import RecipeFilter, IngredientFilter
@@ -11,7 +10,7 @@ from .serializers import (
     RecipeReadSerializer,
     RecipeWriteSerializer,
     ShortRecipeSerializer,
-    SubscriptionSerializer,
+    SubscribedAuthorSerializer,
     AvatarSerializer,
     UserDetailSerializer,
 )
@@ -43,37 +42,43 @@ class AppUserViewSet(DjoserUserViewSet):
 
     @action(detail=True, methods=['post', 'delete'],
             permission_classes=[IsAuthenticated])
-    @action(detail=True, methods=['post', 'delete'],
-            permission_classes=[IsAuthenticated])
     def subscribe(self, request, id=None):
-        author_to_act_on = get_object_or_404(
+        author = get_object_or_404(
             User, id=id)
         current_user = request.user
 
-        if current_user == author_to_act_on:
-            if request.method == "POST":  # Prevent subscribing to self
+        if request.method == "POST":
+
+            if current_user == author:
                 raise serializers.ValidationError(
                     {"errors": "Нельзя подписаться на самого себя."})
 
-        if request.method == "POST":
             subscription, created = Subscription.objects.get_or_create(
-                user=current_user, author=author_to_act_on
+                user=current_user, author=author
             )
             if not created:
                 raise serializers.ValidationError(
-                    {"errors": "Вы уже подписаны на этого автора."})
-            serializer = SubscriptionSerializer(
-                author_to_act_on, context={"request": request})
+                    {"errors": f"Вы уже подписаны на автора"
+                     f" {author.username}."})
+            serializer = SubscribedAuthorSerializer(
+                author, context={"request": request})
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            try:
-                subscription_to_delete = Subscription.objects.get(
-                    user=current_user, author=author_to_act_on)
-                subscription_to_delete.delete()
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            except Subscription.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"errors": "Вы не были подписаны на этого автора."})
+        # в ТЗ нужно 400 возвращать, нельзя 404
+        # delete_non_existing_subscription // Second User
+        # "При попытке пользователя удалить несуществующую подписку должен
+        # вернуться ответ со статусом 400"
+        try:
+            subscription_to_delete = Subscription.objects.get(
+                user=current_user, author=author
+            )
+            subscription_to_delete.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Subscription.DoesNotExist:
+            # возвращает 400
+            raise serializers.ValidationError(
+                {"errors": f"Вы не были подписаны на автора"
+                 f" {author.username}."}
+            )
 
     @action(detail=False, methods=['get'],
             permission_classes=[IsAuthenticated])
@@ -83,15 +88,10 @@ class AppUserViewSet(DjoserUserViewSet):
             'author_id', flat=True)
         authors_user_is_following = User.objects.filter(
             pk__in=subscribed_author_ids).prefetch_related('recipes')
-
         page = self.paginate_queryset(authors_user_is_following)
-        if page is not None:
-            serializer = SubscriptionSerializer(
-                page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-        serializer = SubscriptionSerializer(
-            authors_user_is_following, many=True, context={'request': request})
-        return Response(serializer.data)
+        serializer = SubscribedAuthorSerializer(
+            page, many=True, context={'request': request})
+        return self.get_paginated_response(serializer.data)
 
     @action(
         detail=False,
@@ -121,10 +121,7 @@ class AppUserViewSet(DjoserUserViewSet):
     @action(["get", "put", "patch", "delete"], detail=False,
             permission_classes=[IsAuthenticated])
     def me(self, request, *args, **kwargs):
-        # self.get_instance() usually returns request.user
-        self.get_object = self.get_instance
-        if request.method == "GET":
-            return self.retrieve(request, *args, **kwargs)
+        return super().me(request, *args, **kwargs)
 
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
@@ -133,9 +130,8 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Ingredient.objects.all()
     serializer_class = IngredientSerializer
     permission_classes = (permissions.AllowAny,)
-    pagination_class = None  # Ingredients usually don't need pagination
-    filter_backends = (IngredientFilter,)  # Use custom SearchFilter
-    # Search by name start (case-insensitive default)
+    pagination_class = None
+    filter_backends = (IngredientFilter,)
     search_fields = ("^name",)
 
 
@@ -161,8 +157,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         serializer.save(author=self.request.user)
 
     def _manage_user_recipe_relation(
-        self, request, pk, model_class,
-        error_msg_exists_verb, error_msg_not_exists_verb
+        self, request, pk, model_class
     ):
         recipe = get_object_or_404(Recipe, pk=pk)
         current_user = request.user  # Renamed for clarity
@@ -170,43 +165,49 @@ class RecipeViewSet(viewsets.ModelViewSet):
         model_verbose_name_accusative = (
             model_class._meta.verbose_name_plural.lower())
 
-        relation_instance, created = model_class.objects.get_or_create(
-            user=current_user, recipe=recipe
-        )
-
         if request.method == "POST":
+            relation_instance, created = model_class.objects.get_or_create(
+                user=current_user, recipe=recipe
+            )
             if not created:
                 raise serializers.ValidationError(
-                    {"errors": f'''Рецепт уже {error_msg_exists_verb}
-                     {model_verbose_name_accusative}.'''}
+                    {"errors": f"Рецепт уже добавлен в"
+                     f" {model_verbose_name_accusative}."}
                 )
-            # Assuming ShortRecipeSerializer is defined
             serializer = ShortRecipeSerializer(recipe)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:  # DELETE request
-            if created:
-                relation_instance.delete()
-                raise serializers.ValidationError(
-                    {"errors": f'''Рецепт не был {error_msg_not_exists_verb}
-                     {model_verbose_name_accusative}
-                      (попытка удалить несуществующий).'''}
-                )
-            # If !created, it means it existed. Delete it.
-            relation_instance.delete()
+        # в ТЗ нужно 400 возвращать, нельзя 404
+        # remove_not_added_from_shopping_cart // Second User
+        # "Запрос зарегистрированного пользователя на удаление из корзины
+        # рецепта, который не был туда добавлен, должен
+        # вернуть ответ со статусом 400"
+        # remove_not_added_from_favorite // Second User
+        # "Запрос пользователя на удаление из избранного рецепта,
+        # который не был туда добавлен, должен вернуть ответ со статусом 400"
+        try:
+            instance_to_delete = model_class.objects.get(
+                user=current_user, recipe=recipe
+            )
+            instance_to_delete.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
+        except model_class.DoesNotExist:
+            # возвращает 400
+            raise serializers.ValidationError(
+                {"errors": "Попытка удалить несуществующий рецепт."}
+            )
 
     @action(detail=True, methods=["post", "delete"],
             permission_classes=[IsAuthenticated])
     def favorite(self, request, pk=None):
         return self._manage_user_recipe_relation(
-            request, pk, Favorite, "добавлен в", "в"
+            request, pk, Favorite
         )
 
     @action(detail=True, methods=["post", "delete"],
             permission_classes=[IsAuthenticated])
     def shopping_cart(self, request, pk=None):
         return self._manage_user_recipe_relation(
-            request, pk, ShoppingCart, "добавлен в", "в"
+            request, pk, ShoppingCart
         )
 
     @action(detail=False, methods=["get"],
@@ -215,15 +216,11 @@ class RecipeViewSet(viewsets.ModelViewSet):
         user = request.user
         shopping_list_text = generate_shopping_list_text(user)
 
-        # Use BytesIO for FileResponse
-        text_bytes = shopping_list_text.encode('utf-8')
-        file_like_object = io.BytesIO(text_bytes)
-
         response = FileResponse(
-            file_like_object,
+            shopping_list_text,
             as_attachment=True,
             filename="foodgram_shopping_list.txt",
-            content_type="text/plain; charset=utf-8"  # Specify charset
+            content_type="text/plain"
         )
         return response
 
@@ -232,9 +229,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
         permission_classes=[permissions.AllowAny], url_path="get-link"
     )
     def get_link(self, request, pk=None):
-        recipe = get_object_or_404(Recipe, pk=pk)
+        if not Recipe.objects.filter(pk=pk).exists():
+            raise Http404("Рецепт не найден.")
         short_link_path = reverse(
-            "recipe-short-link", kwargs={"recipe_pk": recipe.pk})
+            "recipe-short-link", args=[pk])
         absolute_short_link = request.build_absolute_uri(short_link_path)
         return Response({"short-link": absolute_short_link},
                         status=status.HTTP_200_OK)
@@ -242,5 +240,4 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
 def recipe_short_link_redirect(request, recipe_pk):
     get_object_or_404(Recipe, pk=recipe_pk)
-    frontend_url = f"/recipes/{recipe_pk}/"
-    return redirect(frontend_url)
+    return redirect(f"/recipes/{recipe_pk}/")

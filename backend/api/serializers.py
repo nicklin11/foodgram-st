@@ -43,8 +43,6 @@ class UserDetailSerializer(DjoserUserSerializer):
             request
             and request.user
             and request.user.is_authenticated
-            and isinstance(target_user, User)
-            and target_user.pk
             and Subscription.objects.filter(
                 user=request.user, author=target_user
             ).exists()
@@ -128,13 +126,8 @@ class RecipeReadSerializer(serializers.ModelSerializer):
 
     def get_user_from_context(self):
         request = self.context.get("request")
-        if (
-            request
-            and hasattr(request, "user")
-            and request.user.is_authenticated
-        ):
-            return request.user
-        return None
+        return request.user if (request
+                                and request.user.is_authenticated) else None
 
     def get_is_favorited(self, obj):
         """Check if the recipe is favorited by the request user."""
@@ -224,7 +217,6 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
             (
                 RecipeIngredient(
                     recipe=recipe,
-                    # ingredient_item['id'] is Ingredient instance
                     ingredient=ingredient_item["id"],
                     amount=ingredient_item["amount"],
                 )
@@ -242,14 +234,10 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         ingredients_data = validated_data.pop("ingredients", None)
-        instance = super().update(instance, validated_data)
-
-        if ingredients_data is not None:
-            instance.recipeingredients.all().delete()
-            self._add_ingredients(instance, ingredients_data)
-
-        instance.save()
-        return instance
+        instance.recipeingredients.all().delete()
+        self._add_ingredients(instance, ingredients_data)
+        instance.save()  # нельзя вернуть метод safe()
+        return super().update(instance, validated_data)
 
     def to_representation(self, instance):
         return RecipeReadSerializer(
@@ -269,7 +257,7 @@ class ShortRecipeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class SubscriptionSerializer(UserDetailSerializer):
+class SubscribedAuthorSerializer(UserDetailSerializer):
     """Serializer for displaying subscriptions (authors user follows)."""
     recipes = serializers.SerializerMethodField()
     recipes_count = serializers.IntegerField(
@@ -287,12 +275,9 @@ class SubscriptionSerializer(UserDetailSerializer):
             limit_str = request.GET.get('recipes_limit')
             recipes_limit = int(limit_str) if limit_str is not None else None
         except (ValueError, TypeError):
-            recipes_limit = None
+            recipes_limit = 10**10
 
-        recipes_queryset = author_obj.recipes.all()
-
-        if recipes_limit is not None and recipes_limit > 0:
-            recipes_queryset = recipes_queryset[:recipes_limit]
+        recipes_queryset = author_obj.recipes.all()[:recipes_limit]
 
         serializer = ShortRecipeSerializer(
             recipes_queryset, many=True, read_only=True)

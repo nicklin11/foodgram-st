@@ -1,4 +1,5 @@
 # backend/api/admin.py
+import numpy as np
 from django.contrib import admin
 from django.db.models import Count
 from django.utils.html import format_html, mark_safe
@@ -9,36 +10,84 @@ from .models import (Ingredient, Recipe, RecipeIngredient,
 
 
 class CookingTimeRangeFilter(admin.SimpleListFilter):
-    title = 'время приготовления'
+    title = 'cooking time'
     parameter_name = 'cooking_time_range'
 
-    SHORT_THRESHOLD_MINUTES = 30
-    MEDIUM_THRESHOLD_MINUTES = 60
+    # Thresholds will be calculated dynamically
+    _short_threshold = None
+    _medium_threshold = None
+
+    def _calculate_thresholds(self, queryset):
+        """
+        Calculates dynamic thresholds based on the current recipe set.
+        Uses 33rd and 66th percentiles to divide into three groups.
+        """
+        if CookingTimeRangeFilter._short_threshold is not None and \
+           CookingTimeRangeFilter._medium_threshold is not None:
+            return
+
+        # Get all distinct cooking times
+        cooking_times = sorted(
+            list(queryset.values_list('cooking_time', flat=True).distinct()))
+
+        if not cooking_times or len(cooking_times) < 3:
+            CookingTimeRangeFilter._short_threshold = 20
+            CookingTimeRangeFilter._medium_threshold = 45
+            if len(cooking_times) == 1:
+                CookingTimeRangeFilter._short_threshold = cooking_times[0]
+                CookingTimeRangeFilter._medium_threshold = cooking_times[0] + 1
+            elif len(cooking_times) == 2:
+                CookingTimeRangeFilter._short_threshold = cooking_times[0]
+                CookingTimeRangeFilter._medium_threshold = cooking_times[1]
+            return
+
+        p33 = int(np.percentile(cooking_times, 33.33))
+        p66 = int(np.percentile(cooking_times, 66.67))
+
+        if p33 >= p66:
+            if p66 > min(cooking_times):
+                p33 = max(min(cooking_times), p66 - 1)
+            else:
+                p66 = p33 + 1
+
+        if p33 == p66:
+            if p33 == max(cooking_times) and p33 > min(cooking_times):
+                p33 = max(min(cooking_times), p33 - 1)
+            else:
+                p66 = p33 + 1
+
+        CookingTimeRangeFilter._short_threshold = p33
+        CookingTimeRangeFilter._medium_threshold = p66
 
     def lookups(self, request, model_admin):
+        self._calculate_thresholds(model_admin.model.objects.all())
+
+        short_t = CookingTimeRangeFilter._short_threshold
+        medium_t = CookingTimeRangeFilter._medium_threshold
+
         return (
-            (f'<{self.SHORT_THRESHOLD_MINUTES}',
-             f'Быстрые (до {self.SHORT_THRESHOLD_MINUTES} мин)'),
-            (f'{self.SHORT_THRESHOLD_MINUTES}-{self.MEDIUM_THRESHOLD_MINUTES}',
-             f'''Средние
-              ({self.SHORT_THRESHOLD_MINUTES}-{self.MEDIUM_THRESHOLD_MINUTES}
-               мин)'''),
-            (f'>{self.MEDIUM_THRESHOLD_MINUTES}',
-             f'Долгие (более {self.MEDIUM_THRESHOLD_MINUTES} мин)'),
+            (f'lt_{short_t}', f'Quick (up to {short_t} min)'),
+            (f'gte_{short_t}_lte_{medium_t}',
+             f'Medium ({short_t}-{medium_t} min)'),
+            (f'gt_{medium_t}', f'Long (over {medium_t} min)'),
         )
 
     def queryset(self, request, queryset):
-        if self.value() == f'<{self.SHORT_THRESHOLD_MINUTES}':
+        self._calculate_thresholds(queryset)
+
+        short_t = CookingTimeRangeFilter._short_threshold
+        medium_t = CookingTimeRangeFilter._medium_threshold
+
+        value = self.value()
+        if value == f'lt_{short_t}':
+            return queryset.filter(cooking_time__lt=short_t)
+        if value == f'gte_{short_t}_lte_{medium_t}':
             return queryset.filter(
-                cooking_time__lt=self.SHORT_THRESHOLD_MINUTES)
-        if self.value() == f'''
-        {self.SHORT_THRESHOLD_MINUTES}-{self.MEDIUM_THRESHOLD_MINUTES}''':
-            return queryset.filter(
-                cooking_time__gte=self.SHORT_THRESHOLD_MINUTES,
-                cooking_time__lte=self.MEDIUM_THRESHOLD_MINUTES)
-        if self.value() == f'>{self.MEDIUM_THRESHOLD_MINUTES}':
-            return queryset.filter(
-                cooking_time__gt=self.MEDIUM_THRESHOLD_MINUTES)
+                cooking_time__gte=short_t,
+                cooking_time__lte=medium_t
+            )
+        if value == f'gt_{medium_t}':
+            return queryset.filter(cooking_time__gt=medium_t)
         return queryset
 
 
@@ -50,18 +99,15 @@ class IngredientAdmin(admin.ModelAdmin):
     list_filter = ('measurement_unit',)
     empty_value_display = '-пусто-'
 
-    # Use ordering
-    @admin.display(description='Кол-во рецептов',
-                   ordering='recipes_count_annotation')
-    # Renamed obj, added type hint
+    @admin.display(description='Рецепты',
+                   ordering='recipes_count')
     def get_recipe_count_display(self, ingredient: Ingredient):
-        # Use the pre-annotated value for efficiency
-        return ingredient.recipes_count_annotation
+        return ingredient.recipes_count
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         queryset = queryset.annotate(
-            recipes_count_annotation=Count('recipes_featuring_ingredient'))
+            recipes_count=Count('recipes'))
         return queryset
 
 
@@ -96,7 +142,7 @@ class RecipeAdmin(admin.ModelAdmin):
         # Use the annotated value for efficiency
         return recipe.favorites_count_annotation
 
-    @admin.display(description='Ингредиенты (до 3)')
+    @admin.display(description='Ингредиенты')
     @mark_safe
     def display_ingredients_short(self, recipe: Recipe):
         # Access through 'recipeingredients' related_name
@@ -105,44 +151,39 @@ class RecipeAdmin(admin.ModelAdmin):
             return "Нет ингредиентов"
         # Display first 3 ingredients
         display_list = [
-            f'''{ing.ingredient.name}
-             ({ing.amount}
-             {ing.ingredient.measurement_unit})''' for ing in ingredients[:3]]
-        output = ",<br>".join(display_list)  # Use <br> for new lines in admin
-        if len(ingredients) > 3:
-            output += ", ..."
-        return mark_safe(output)
+            f'{ing.ingredient.name}'
+            f' ({ing.amount}'
+            f' {ing.ingredient.measurement_unit})' for ing in ingredients]
+        return mark_safe("<br>".join(display_list))
 
-    @admin.display(description='Картинка (превью)')
+    @admin.display(description='Картинка')
     @mark_safe
     def display_image_thumbnail(self, recipe: Recipe):
         if recipe.image and hasattr(recipe.image, 'url'):
-            return format_html(
-                '''<a href="{0}" target="_blank"><img src="{0}"
-                 style="max-height: 50px; max-width: 70px;" /></a>''',
+            return format_html((
+                ' < a href = "{0}" target = "_blank" > <img src = "{0}"'
+                ' style = "max-height: 50px; max-width: 70px;" / > < /a > '),
                 recipe.image.url
             )
         return "Нет изображения"
 
     # For readonly_fields, if you want a larger preview there
-    @admin.display(description='Картинка (полная)')
+    @admin.display(description='Картинка')
     @mark_safe
     def display_image_preview(self, recipe: Recipe):
         if recipe.image and hasattr(recipe.image, 'url'):
-            return format_html(
-                '''<a href="{0}" target="_blank"><img src="{0}"
-                 style="max-height: 200px; max-width: 200px;" /></a>''',
+            return format_html((
+                ' < a href = "{0}" target = "_blank" > <img src = "{0}"'
+                ' style = "max-height: 200px; max-width: 200px;" / > < /a >'),
                 recipe.image.url
             )
-        return "Нет изображения"
+            return "Нет изображения"
 
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        # Annotate for sorting favorites count
-        # Assumes Favorite.recipe.related_name is 'favorited_by_set'
-        queryset = queryset.annotate(
-            favorites_count_annotation=Count('favorited_by_set'))
-        return queryset
+            def get_queryset(self, request):
+                queryset = super().get_queryset(request)
+                queryset = queryset.annotate(
+                    favorites_count_annotation=Count('favorited_by_set'))
+                return queryset
 
 
 @admin.register(RecipeIngredient)
